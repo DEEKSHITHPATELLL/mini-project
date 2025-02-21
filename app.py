@@ -15,8 +15,6 @@ img_height, img_width = 128, 128
 model_path = "gesture_model.keras"
 labels_path = "class_labels.txt"
 gesture_matrices_path = "gesture_matrices.json"
-
-# Load CNN Model
 model = load_model(model_path)
 with open(labels_path, "r") as f:
     class_labels = [line.strip() for line in f if line.strip()]
@@ -28,15 +26,10 @@ mp_draw = mp.solutions.drawing_utils
 
 current_prediction = ""
 tts_engine = pyttsx3.init()
-
-# ----------------------- Distance Calculation with Error Handling -----------------------
 def calculate_distance(landmarks1, landmarks2):
     try:
-        # Ensure both landmark sets have the same number of points
         if len(landmarks1) != len(landmarks2):
-            return float('inf')  # Return a large value if mismatch occurs
-
-        # Convert lists to NumPy arrays
+            return float('inf')  
         landmarks1 = np.array(landmarks1)
         landmarks2 = np.array(landmarks2)
 
@@ -44,8 +37,6 @@ def calculate_distance(landmarks1, landmarks2):
     except Exception as e:
         print(f"Error in calculate_distance: {e}")
         return float('inf')
-
-# ----------------------- Gesture Matching with Debugging -----------------------
 def match_gesture(landmarks):
     try:
         normalized_landmarks = [(lm.x, lm.y, lm.z) for lm in landmarks.landmark]
@@ -62,33 +53,26 @@ def match_gesture(landmarks):
     except Exception as e:
         print(f"Error in match_gesture: {e}")
         return None, float('inf')
-
-# ----------------------- Text-to-Speech -----------------------
 def speak(text):
     def run_tts():
         tts_engine.say(text)
         tts_engine.runAndWait()
     threading.Thread(target=run_tts, daemon=True).start()
-
-# ----------------------- Video Streaming with Debugging -----------------------
 def generate_frames():
     global current_prediction
     cap = cv2.VideoCapture(0)
-
-    # Set high resolution
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
     try:
         while True:
             ret, frame = cap.read()
             if not ret:
-                print("Failed to capture frame. Exiting loop.")
+                print("Failed to capture frame.")
                 break
-
-            frame = cv2.resize(frame, (860, 480))
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = hands.process(rgb_frame)
+            detected = False
 
             if results.multi_hand_landmarks:
                 for landmarks in results.multi_hand_landmarks:
@@ -100,10 +84,11 @@ def generate_frames():
                         speak(current_prediction)
                     else:
                         current_prediction = "Gesture not recognized. Please try again."
-            else:
-                current_prediction = "No hand detected. Please show your hand to the camera."
-
-            ret, buffer = cv2.imencode('.jpg', frame)
+                    detected = True
+            
+            if not detected:
+                current_prediction = "No hand detected. Please show your hand."
+            ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
             if not ret:
                 print("Error encoding frame.")
                 continue
@@ -116,10 +101,8 @@ def generate_frames():
         print(f"Error in generate_frames: {e}")
 
     finally:
-        cap.release()  # Ensure the camera is released properly
+        cap.release()
         print("Video capture released.")
-
-# ----------------------- Flask Routes -----------------------
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -131,7 +114,5 @@ def video_feed():
 @app.route('/get_prediction')
 def get_prediction():
     return jsonify({'prediction': current_prediction})
-
-# ----------------------- Run Flask App -----------------------
 if __name__ == '__main__':
     app.run(debug=True)
